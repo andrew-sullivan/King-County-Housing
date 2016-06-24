@@ -1,0 +1,309 @@
+---
+title: "Modeling the price of houses in King County, Washington"
+author: "Andrew Sullivan"
+date: '`r format(Sys.time(), "%b %d, %Y")`'
+bibliography:
+- ./BIB/PackagesUsed.bib
+- ./BIB/CV.bib
+knit: "bookdown::render_book"
+output:
+  bookdown::html_document2:
+  self_contained: TRUE
+documentclass: article
+link-citations: yes
+---
+
+```{r, label = "setup", echo = FALSE, results= 'hide', message = FALSE, warning = FALSE}
+library(car)
+library(MASS)
+library(DT)
+library(ggplot2)
+library(knitr)
+library(boot)
+library(ggmap)
+knitr::opts_chunk$set(comment = NA, fig.align = 'center', fig.height = 5, fig.width = 5, prompt = FALSE, 
+highlight = TRUE, tidy = FALSE, warning = FALSE, message = FALSE, 
+tidy.opts=list(blank = TRUE, width.cutoff = 80))
+
+#read in data
+housedata = read.csv("housedata.csv")
+```
+
+# Introduction
+
+The goal of this project was to predict prices for houses in King County, Washington. The county is unusually large, having nearly twice the land area of Rhode Island and containing the thirteenth largest county population in the United States. Additionally, it contains a range of geographies and settings, including a metropolis (Seattle), several lakes, and more sparse rural areas. Because of the great variety found in the county, many variables ended up as features in the final predictive model. 
+
+Data was examined from 17384 houses sold in the county between 2014 and 2015 in order to construct the model. Their locations are plotted on the county map below:
+
+```{r, label = "map", echo = FALSE, warning = FALSE, message = FALSE}
+library(ggmap)
+KingMap <-
+  get_map(
+    location = c(lon = -122.1, lat = 47.48),
+    zoom = 10,
+    source = "google",
+    maptype = "roadmap"
+  )
+ggmap(KingMap) +
+  geom_point(
+    aes(x = housedata$long, y = housedata$lat),
+    data = housedata,
+    alpha = .2,
+    color = "purple",
+    size = 0.01
+  ) +
+  ggtitle("Houses Sold in King County (2014-2015)") +
+  labs(x = "longitute", y = "latitude")
+```
+
+
+# Methods
+
+## Data Collection
+
+Data used in this collection was copied from:
+
+[https://github.com/STAT-ATA-ASU/STT3851Spring2016/blob/gh-pages/Data/housedata.csv](https://github.com/STAT-ATA-ASU/STT3851Spring2016/blob/gh-pages/Data/housedata.csv)
+
+on March 31, 2016.
+
+Most of the variables are self-explanatory, but a glossary is available from the [King County Department of Assessments](http://your.kingcounty.gov/assessor/eRealProperty/ResGlossaryOfTerms.html).
+
+The variables `id` and `date` were removed from the data. The variables `waterfront`, `condition`, `grade`, and `zipcode` were converted from numeric values to factors. The variable `yr_renovated` was set to the corresponding `yr_built` for any houses that were missing `yr_renovated` values - that is, any houses that had not been renovated had their renovation dates re-set to the dates they were originally built. The month and day for both of these variables was set to September 1st. Finally, a new variable, `lot_size`, was introduced based on the realtor lot size categories reported in the paper [Modeling Home Prices Using Realtor Data](http://www.amstat.org/publications/jse/v16n2/datasets.pardoe.html) (@pardoe_modeling_2008).
+
+The cleaned data including initial variables can be seen and explored in the following table:
+
+```{r, label = "dataclean", include = FALSE}
+#remove id and date columns
+housedata <- subset(housedata,select=-c(1,2))
+
+#waterfront and condition converted to factor variables
+housedata$waterfront <- factor(housedata$waterfront, labels = c("No", "Yes"))
+housedata$condition <- factor(housedata$condition, labels = c("poor", "fair", "average", "good", "very good"))
+
+#yr_renovated set to yr_built unless yr_renovated date is later
+housedata$yr_renovated <- ifelse(housedata$yr_renovated == 0, housedata$yr_built, housedata$yr_renovated)
+housedata$yr_built <- as.Date(ISOdate(housedata$yr_built, 9, 1))  # Complete Year, Sept 1
+housedata$yr_renovated <- as.Date(ISOdate(housedata$yr_renovated, 9, 1))  # Last renovated Year, Sept 1
+
+#zipcode and grade converted to factors
+housedata$zipcode <- factor(housedata$zipcode)
+housedata$grade <- factor(housedata$grade)
+
+#sqft_lot factor added according to realtor categories
+lotbreaks <- c(0,3000,5000,7000,10000,15000,20000,43560,(3*43560),(5*43560),(10*43560),(20*43560),(40*43560))
+lotlabels <- c(1:12)
+housedata$lot_size <-cut(housedata$sqft_lot,breaks=lotbreaks,labels=lotlabels)
+```
+
+```{r, label = "datatable", echo = FALSE, warning = FALSE, message = FALSE}
+datatable(housedata, rownames=FALSE,
+          extensions = 'FixedColumns',
+          options = list(
+          dom = 't',
+          scrollX = TRUE,
+          scrollCollapse = TRUE
+))
+```
+
+## Exploratory Analysis <a name="plot"></a>
+
+Exploratory analysis was performed by examining plots and single-variable regressions for various features onto `price`. A few examples follow: 
+
+```{r, label = "exploratory", echo = FALSE}
+plot(price~waterfront,data=housedata,
+     ylab="Price",
+     xlab="Waterfront",
+     main="Effect of Waterfront Location on Price",
+     col="lightblue")
+
+plot(price ~ sqft_living, data = housedata, col = "lightgreen", pch = 19,
+     main="Effect of Living Space on Price",
+     ylab="Price",
+     xlab="Living Space (Square Feet)")
+mod1 <- lm(price ~ sqft_living, data = housedata)
+abline(mod1, col = "blue")
+```
+
+At this point, the variables `grade` and `condition` were collapsed to account for limited observations and limited distinct effect in their lower categories. The levels **1** - **6** from `grade` were placed into one new lowest category **1**, and the levels **poor** and **fair** from `condition` were placed into one new lowest category **poor-fair**. Essentially, any houses below average in `grade` or `condition` were grouped together.
+
+```{r, include = FALSE}
+#price~bedrooms
+plot(housedata$bedrooms, housedata$price)
+
+#price~bathrooms
+plot(housedata$bathrooms, housedata$price)
+
+#price~sqft_living
+plot(price ~ sqft_living, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_living, data = housedata)
+abline(mod1, col = "blue")
+
+#price~sqft_lot
+plot(price ~ sqft_lot, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_lot, data = housedata)
+abline(mod1, col = "blue")
+
+#price~floors
+plot(price ~ floors, data = housedata)
+
+#price~waterfront
+plot(price ~ waterfront, data = housedata)
+
+#price~view
+plot(price ~ view, data = housedata)
+
+#price~condition
+plot(price ~ condition, data = housedata)
+
+#price~grade
+plot(price ~ grade, data = housedata, col = "red", pch = 19)
+
+#price~sqft_above
+plot(price ~ sqft_above, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_above, data = housedata)
+abline(mod1, col = "blue")
+ 
+#price~sqft_basement
+plot(price ~ sqft_basement, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_basement, data = housedata)
+abline(mod1, col = "blue")
+
+#price~yr_built
+plot(price ~ yr_built, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ yr_built, data = housedata)
+abline(mod1, col = "blue")
+
+#price~yr_renovated
+plot(price ~ yr_renovated, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ yr_renovated, data = housedata)
+abline(mod1, col = "blue")
+
+#price~zipcode
+plot(price ~ zipcode, data = housedata)
+
+#price~lat
+plot(price ~ lat, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ lat, data = housedata)
+abline(mod1, col = "blue")
+
+#price~long
+plot(price ~ long, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ long, data = housedata)
+abline(mod1, col = "blue")
+
+#price~sqft_living15
+plot(price ~ sqft_living15, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_living15, data = housedata)
+abline(mod1, col = "blue")
+
+#price~sqft_lot15
+plot(price ~ sqft_lot15, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_lot15, data = housedata)
+abline(mod1, col = "blue")
+
+#collapsing grade
+levels(housedata$grade) <- list("1"=c("1","2","3","4","5","6"), "2"="7", "3"="8", "4"="9", "5"="10", "6"="11", "7"="12", "8"="13")
+
+#collapsing condition
+levels(housedata$condition) <- list("poor-fair"=c("poor","fair"), "average"="average", "good"="good", "very good"="very good")
+```
+
+## Statistical Modeling
+
+Standard multivariate regression techniques such as those described in @james_introduction_2013 were used to develop a predictive model.
+
+## Reproducibility
+
+All analyses performed in this paper can be reproduced by running the original `.Rmd` file with RStudio, assuming the original housing data file has been downloaded to the user's working directory as "housingdata.csv". The `R` packages `car` [@R-car], `ggplot2` [@R-ggplot2], `knitr` [@R-knitr], `rmarkdown` [@R-rmarkdown], `MASS` [@R-MASS], `DT` [@R-DT], `boot` [@R-boot], `ggmap` [@R-ggmap] and `bookdown` [@R-bookdown]  will need to be installed on the user's computer.
+
+# Results
+
+```{r, label = "models", include = FALSE}
+#forward selection
+modfs <- stepAIC(lm(price ~ 1, data = housedata), scope = .~bedrooms + bathrooms + sqft_living + sqft_lot + floors + waterfront + view + condition + grade + sqft_above + sqft_basement + yr_built + yr_renovated + zipcode + lat + long + sqft_living15 + sqft_lot15 + lot_size, direction = "forward", test = "F")
+summary(modfs) 
+residualPlots(modfs)
+modfsglm <- glm(modfs)
+CV5modfs <- (cv.glm(data = housedata, glmfit = modfsglm, K = 5)$delta)^.5
+
+#introducing interactions and polynomials
+mod2 <- lm(price ~ grade + zipcode + poly(sqft_living,2,raw=TRUE) + sqft_lot + waterfront + view + lot_size + condition + poly(sqft_above,2,raw=TRUE) + bedrooms + yr_built + yr_renovated + floors + sqft_living15 + sqft_lot15 + sqft_living:sqft_lot + sqft_lot15:sqft_lot + sqft_living15:sqft_living + bedrooms:bathrooms + waterfront:sqft_living + waterfront:sqft_lot + lat:long + lat + long + zipcode:sqft_lot + zipcode:sqft_living, data = housedata)
+summary(mod2) 
+residualPlots(mod2)
+mod2glm <- glm(price ~ grade + zipcode + poly(sqft_living,2,raw=TRUE) + sqft_lot + waterfront + view + lot_size + condition + poly(sqft_above,2,raw=TRUE) + bedrooms + yr_built + yr_renovated + floors + sqft_living15 + sqft_lot15 + sqft_living:sqft_lot + sqft_lot15:sqft_lot + sqft_living15:sqft_living + bedrooms:bathrooms + waterfront:sqft_living + waterfront:sqft_lot + lat:long + lat + long + zipcode:sqft_lot + zipcode:sqft_living, data = housedata)
+CV5mod2 <- (cv.glm(data = housedata, glmfit = mod2glm, K = 5)$delta)^.5
+
+#refining model
+mod3 <- lm(price ~ grade + zipcode + I(sqft_living^2) + waterfront + view + lot_size + condition + I(sqft_above^2) + bedrooms + yr_built + yr_renovated + floors + sqft_living15 + sqft_lot15 + sqft_living:sqft_lot + bedrooms:bathrooms + waterfront:sqft_living + waterfront:sqft_lot + lat:long + zipcode:sqft_living, data = housedata)
+summary(mod3) 
+mod3glm <- glm(price ~ grade + zipcode + I(sqft_living^2) + waterfront + view + lot_size + condition + I(sqft_above^2) + bedrooms + yr_built + yr_renovated + floors + sqft_living15 + sqft_lot15 + sqft_living:sqft_lot + bedrooms:bathrooms + waterfront:sqft_living + waterfront:sqft_lot + lat:long + zipcode:sqft_living, data = housedata)
+CV5mod3 <- (cv.glm(data = housedata, glmfit = mod3glm, K = 5)$delta)^.5
+
+#computing multiple mean squared errors
+CVmodfs <- numeric(10)
+CVmod2 <- numeric(10)
+CVmod3 <- numeric(10)
+for (i in 1:10)
+{
+  CVmodfs[i] <- (cv.glm(data = housedata, glmfit = modfsglm, K=5)$delta[2])^.5
+  CVmod2[i] <- (cv.glm(data = housedata, glmfit = mod2glm, K=5)$delta[2])^.5
+  CVmod3[i] <- (cv.glm(data = housedata, glmfit = mod3glm, K=5)$delta[2])^.5
+}
+```
+
+Feature selection was first performed by comparing AIC in a stepwise algorithm using the `MASS` package function `stepAIC` on the cleaned data including all variables. The forward-selected model (`modfs`) suggested inclusion of all features except `sqft_basement`. It reported an adjusted R$^2$ value of `r summary(modfs)$adj.r.squared`.
+
+The second model (`mod2`) included polynomial features as suggested by residual plots of the forward-selected model, as well as interaction features that might be expected to contribute to housing price, including `bedrooms:bathrooms`, `sqft_living:sqft_lot`, `sqft_lot15:sqft_lot`, and `sqft_living15:sqft_living`. Because the `waterfront` variable seemed to have such an outsized effect (see plot in [Exploratory Analysis](#plot) section), interaction features between `waterfront` and several other variables were also introduced. Additionally, as suggested by the recent Seattle Times article [King County home prices hit new highs ](http://www.seattletimes.com/business/real-estate/king-county-home-prices-hit-a-new-record-in-december/) (@bhatt_king_2016), prices for smaller house sizes vary widely among different parts of the county, so interactions between `zipcode:sqft_living` and `zipcode:sqft_lot` were introduced. This model reported an adjusted R$^2$ value of `r summary(mod2)$adj.r.squared`.
+
+The final model (`mod3`) simplified the previous model by dropping several first-degree polynomials and interactions with low significance (p-value > .05). This model reported an adjusted R$^2$ value of `r summary(mod3)$adj.r.squared`.
+
+5-fold cross-validation was performed using all three models with the `cv.glm` function from the `boot` package. `mod3` consistently achieved the lowest mean squared test error. Results of ten repetitions of 5-fold cross-validation tests on all three models are plotted below:
+
+```{r, echo = FALSE}
+plot(CVmod3, col="blue", pch=19,
+     main="5-Fold Cross Validation Test on Three Models",
+     ylab="Mean Squared Test Error (House Price)",
+     xaxt='n',
+     xlab="",
+     ylim=c((min(CVmod3)-1500),(max(CVmodfs)+1500)))
+points(CVmodfs, col="red", pch=19)
+points(CVmod2, col="purple", pch=19)
+legend(1,145000,
+       pch=19,
+       col=c("red","purple","blue"),
+       legend=c("modfs","mod2","mod3"))
+```
+
+
+# Conclusions
+
+The goal of the model was to predict housing prices, so a handful of price predictions have been computed using the final model and are reported in the table below. The mean predicted price (`Estimate`), lower (`Lower`) and upper (`Upper`) limits of a 95% confidence interval are given based on differing variable inputs.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+NEW1 <- data.frame(bedrooms = c(3,3,4,5,6), bathrooms = c(1.75,2,2.25,3,5), sqft_living = c(1420,1500,1910,2100,4000), sqft_lot = c(4500,5000,7800,65000,100000), floors = c(1,1,2,2,3), waterfront = c("Yes","No","No","Yes","No"), view = c(1,1,2,3,4), condition = c("good","very good","good","average","poor-fair"), grade = c("7","4","5","2","3"), sqft_above = c(1200,1400,1800,1900,3500), yr_built = as.Date(ISOdate(c(1955,1970,2015,1987,1941), 9, 1)), yr_renovated = as.Date(ISOdate(c(1955,1989,2015,1992,1941), 9, 1)), zipcode = c("98070","98053","98107","98029","98005"), lat = c(47.41,47.66,47.67,47.56,47.62), long = c(-122.47,-122.02,-122.38,-122.01,-122.17), sqft_living15 = c(1490,1510,1850,2300,2400), sqft_lot15 = c(5000,6000,12000,10000,50000), lot_size = c("2","3","4","8","8"))
+PNEW <- predict(mod3, NEW1, interval = 'confidence')
+PNEW1 <- round(PNEW, digits = 2)
+TNEW1 <- cbind(PNEW1,NEW1)
+TPDATA <- rbind(TNEW1)
+names(TPDATA) <- c("Estimate", "Lower", "Upper", "bedrooms", "bathrooms", "sqft_lot", "sqft_living", "floors", "waterfront", "view", "condition", "grade", "sqft_above", "yr_built", "yr_renovated", "zipcode", "lat", "long", "sqft_living15", "sqft_lot15", "lot_size")
+
+datatable(TPDATA, rownames=FALSE,
+          extensions = 'FixedColumns',
+          options = list(
+          dom = 't',
+          scrollX = TRUE,
+          scrollCollapse = TRUE
+))
+```
+
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', warning = FALSE}
+PackagesUsed <- c("rmarkdown", "knitr", "base", "ggplot2", "car", "bookdown", "MASS", "boot", "DT", "ggmap")
+# Write bib information
+knitr::write_bib(PackagesUsed, file = "./BIB/PackagesUsed.bib")
+# Load packages
+lapply(PackagesUsed, library, character.only = TRUE)
+```
+
+# References

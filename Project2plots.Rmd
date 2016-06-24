@@ -1,0 +1,163 @@
+---
+knit: bookdown::preview_chapter
+---
+
+---
+title: "Project2Plots"
+author: "Andrew Sullivan"
+date: "4/13/2016"
+output: html_document
+---
+
+```{r}
+#packages, data import, data clean
+library(MASS)
+library(ISLR)
+library(DT)
+library(ggplot2)
+library(car)
+library(boot)
+library(leaps)
+housedata = read.csv("housedata.csv")
+housedata$date <- as.Date(housedata$date, "%Y%m%d")
+housedata$waterfront <- factor(housedata$waterfront, labels = c("No", "Yes"))
+housedata$condition <- factor(housedata$condition, labels = c("poor", "fair", "average", "good", "very good"))
+housedata$yr_renovated <- ifelse(housedata$yr_renovated == 0, housedata$yr_built, housedata$yr_renovated)
+housedata$yr_built <- as.Date(ISOdate(housedata$yr_built, 9, 1))  # Complete Year, Sept 1
+housedata$yr_renovated <- as.Date(ISOdate(housedata$yr_renovated, 9, 1))  # Last renovated Year, Sept 1
+#remove id and date columns
+housedata <- subset(housedata,select=-c(1,2))
+```
+
+## Price~Bedrooms
+
+```{r}
+plot(housedata$bedrooms, housedata$price)
+```
+
+## Price~Bathrooms
+
+```{r}
+plot(housedata$bathrooms, housedata$price)
+```
+
+## Price~sqft_living
+
+```{r}
+plot(price ~ sqft_living, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_living, data = housedata)
+abline(mod1, col = "blue")
+```
+
+## Price~sqft_lot
+
+```{r}
+plot(price ~ sqft_lot, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_lot, data = housedata)
+abline(mod1, col = "blue")
+```
+
+## Price~floors
+
+```{r}
+plot(price ~ floors, data = housedata)
+```
+
+## Price~Waterfront
+
+```{r}
+plot(price ~ waterfront, data = housedata)
+```
+
+## Price~View
+
+```{r}
+plot(price ~ view, data = housedata)
+```
+
+## Price~Condition
+
+```{r}
+plot(price ~ condition, data = housedata)
+```
+
+## Price~grade
+
+```{r}
+plot(price ~ grade, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ grade, data = housedata)
+abline(mod1, col = "blue")
+```
+
+## price~sqft_above
+
+```{r}
+plot(price ~ sqft_above, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_above, data = housedata)
+abline(mod1, col = "blue")
+```
+
+## price~sqft_basement
+
+```{r}
+plot(price ~ sqft_basement, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_basement, data = housedata)
+abline(mod1, col = "blue")
+```
+
+## price~yr_built
+
+```{r}
+plot(price ~ yr_built, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ yr_built, data = housedata)
+abline(mod1, col = "blue")
+```
+
+## price~yr_renovated
+
+```{r}
+plot(price ~ yr_renovated, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ yr_renovated, data = housedata)
+abline(mod1, col = "blue")
+```
+
+## price~zipcode
+
+```{r}
+plot(price ~ zipcode, data = housedata)
+```
+
+## price~lat
+
+```{r}
+plot(price ~ lat, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ lat, data = housedata)
+abline(mod1, col = "blue")
+```
+
+## price~long
+
+```{r}
+plot(price ~ long, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ long, data = housedata)
+abline(mod1, col = "blue")
+```
+
+## price~sqft_living15
+
+```{r}
+plot(price ~ sqft_living15, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_living15, data = housedata)
+abline(mod1, col = "blue")
+```
+
+## price~sqft_lot15
+
+```{r}
+plot(price ~ sqft_lot15, data = housedata, col = "red", pch = 19)
+mod1 <- lm(price ~ sqft_lot15, data = housedata)
+abline(mod1, col = "blue")
+```
+
+
+

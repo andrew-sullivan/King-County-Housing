@@ -1,0 +1,137 @@
+---
+knit: bookdown::preview_chapter
+---
+
+---
+title: "Project 2 Recategorization"
+author: "Andrew Sullivan"
+date: "4/15/2016"
+output: html_document
+---
+
+```{r}
+#packages, data import, data clean
+library(MASS)
+library(ISLR)
+library(DT)
+library(ggplot2)
+library(car)
+library(boot)
+library(leaps)
+hd = read.csv("housedata.csv")
+housedata = read.csv("housedata.csv")
+housedata$date <- as.Date(housedata$date, "%Y%m%d")
+housedata$waterfront <- factor(housedata$waterfront, labels = c("No", "Yes"))
+housedata$condition <- factor(housedata$condition, labels = c("poor", "fair", "average", "good", "very good"))
+housedata$yr_renovated <- ifelse(housedata$yr_renovated == 0, housedata$yr_built, housedata$yr_renovated)
+housedata$yr_built <- as.Date(ISOdate(housedata$yr_built, 9, 1))  # Complete Year, Sept 1
+housedata$yr_renovated <- as.Date(ISOdate(housedata$yr_renovated, 9, 1))  # Last renovated Year, Sept 1
+#remove id and date columns
+housedata <- subset(housedata,select=-c(1,2))
+#zipcode and grade recoded to factors
+housedata$zipcode <- factor(housedata$zipcode)
+housedata$grade <- factor(housedata$grade)
+
+#sqft_lot factor added according to realtor categories
+lotbreaks <- c(0,3000,5000,7000,10000,15000,20000,43560,(3*43560),(5*43560),(10*43560),(20*43560),(40*43560))
+lotlabels <- c(1:12)
+housedata$lot_size <-cut(housedata$sqft_lot,breaks=lotbreaks,labels=lotlabels)
+
+#collapsing grade
+levels(housedata$grade) <- list("1"=c("1","2","3","4","5","6"), "2"="7", "3"="8", "4"="9", "5"="10", "6"="11", "7"="12", "8"="13")
+
+#collapsing condition
+levels(housedata$condition) <- list("poor-fair"=c("poor","fair"), "average"="average", "good"="good", "very good"="very good")
+```
+
+```{r}
+#forward selection
+modfs <- stepAIC(lm(price ~ 1, data = housedata), scope = .~bedrooms + bathrooms + sqft_living + sqft_lot + floors + waterfront + view + condition + grade + sqft_above + sqft_basement + yr_built + yr_renovated + zipcode + lat + long + sqft_living15 + sqft_lot15 + lot_size, direction = "forward", test = "F")
+summary(modfs) 
+```
+
+```{r}
+#model from factors suggested by forward selection 
+mod1 <- lm(price ~ grade + zipcode + sqft_living + waterfront + view + lot_size + condition + sqft_above + bedrooms + bathrooms + yr_built + yr_renovated + long:lat + floors + sqft_living15 + sqft_lot15, data = housedata)
+summary(mod1) 
+residualPlots(mod1)
+mod1glm <- glm(price ~ grade + zipcode + sqft_living + waterfront + view + lot_size + condition + sqft_above + bedrooms + bathrooms + yr_built + yr_renovated + long:lat + floors + sqft_living15 + sqft_lot15, data = housedata)
+CV5mod1 <- cv.glm(data = housedata, glmfit = mod1glm, K = 5)$delta
+CV5mod1
+CV5mod1^.5
+```
+
+```{r}
+#introducing interactions and polynomials
+mod2 <- lm(price ~ grade + zipcode + I(sqft_living^2) + waterfront + view + lot_size + condition + I(sqft_above^2) + bedrooms + yr_built + yr_renovated + floors + sqft_living15 + sqft_lot15 + sqft_living:sqft_lot + sqft_lot15:sqft_lot + bedrooms:bathrooms + waterfront:sqft_living + waterfront:sqft_lot + lat:long + lat + long + zipcode:sqft_living, data = housedata)
+summary(mod2) 
+mod2glm <- glm(price ~ grade + zipcode + I(sqft_living^2) + waterfront + view + lot_size + condition + I(sqft_above^2) + bedrooms + yr_built + yr_renovated + floors + sqft_living15 + sqft_lot15 + sqft_living:sqft_lot + bedrooms:bathrooms + waterfront:sqft_living + waterfront:sqft_lot + lat:long + lat + long + zipcode:sqft_living, data = housedata)
+CV5mod2 <- cv.glm(data = housedata, glmfit = mod2glm, K = 5)$delta
+CV5mod2
+CV5mod2^.5
+
+mod3 <- lm(price ~ grade + zipcode + poly(sqft_living,2,raw=TRUE) + waterfront + view + lot_size + condition + poly(sqft_above,2,raw=TRUE) + bedrooms + yr_built + yr_renovated + floors + sqft_living15 + sqft_lot15 + sqft_living:sqft_lot + sqft_lot15:sqft_lot + sqft_living15:sqft_living + bedrooms:bathrooms + waterfront:sqft_living + waterfront:sqft_lot + lat:long + lat + long + zipcode:sqft_lot + zipcode:sqft_living, data = housedata)
+mod3glm <- glm(price ~ grade + zipcode + poly(sqft_living,2,raw=TRUE) + waterfront + view + lot_size + condition + poly(sqft_above,2,raw=TRUE) + bedrooms + yr_built + yr_renovated + floors + sqft_living15 + sqft_lot15 + sqft_living:sqft_lot + sqft_lot15:sqft_lot + sqft_living15:sqft_living + bedrooms:bathrooms + waterfront:sqft_living + waterfront:sqft_lot + lat:long + lat + long + zipcode:sqft_lot + zipcode:sqft_living, data = housedata)
+CV5mod3 <- cv.glm(data = housedata, glmfit = mod3glm, K=5)$delta
+CV5mod3
+CV5mod3^.5
+```
+
+```{r}
+#lat/long map
+require(ggmap)
+
+area <- "King County"
+
+kingcounty <- get_map(location=area,maptype="roadmap",zoom=9)
+ggmap(kingcounty)
+
+ggmap(kingcounty) + geom_point(data=hd, aes(x=long,y=lat),color="red",size=.5)
+```
+
+```{r}
+#reformatting lat/long into areas
+plot(lat~long,data=hd,col="lightblue",pch=20)
+abline(h=47.52,v=c(-122.25,-122.0))
+
+
+```
+
+```{r}
+housedataT <- read.csv("housedataTEST.csv")
+
+#waterfront and condition converted to factor variables
+housedataT$waterfront <- factor(housedataT$waterfront, labels = c("No", "Yes"))
+housedataT$condition <- factor(housedataT$condition, labels = c("poor", "fair", "average", "good", "very good"))
+
+#yr_renovated set to yr_built unless yr_renovated ate is later
+housedataT$yr_renovated <- ifelse(housedataT$yr_renovated == 0, housedataT$yr_built, housedataT$yr_renovated)
+housedataT$yr_built <- as.Date(ISOdate(housedataT$yr_built, 9, 1))  # Complete Year, Sept 1
+housedataT$yr_renovated <- as.Date(ISOdate(housedataT$yr_renovated, 9, 1))  # Last renovated Year, Sept 1
+
+#zipcode and grade converted to factors
+housedataT$zipcode <- factor(housedataT$zipcode)
+housedataT$grade <- factor(housedataT$grade)
+
+#sqft_lot factor added according to realtor categories
+lotbreaks <- c(0,3000,5000,7000,10000,15000,20000,43560,(3*43560),(5*43560),(10*43560),(20*43560),(40*43560))
+lotlabels <- c(1:12)
+
+
+#collapsing grade
+levels(housedataT$grade) <- list("1"=c("1","2","3","4","5","6"), "2"="7", "3"="8", "4"="9", "5"="10", "6"="11", "7"="12", "8"="13")
+
+#collapsing condition
+levels(housedataT$condition) <- list("poor-fair"=c("poor","fair"), "average"="average", "good"="good", "very good"="very good")
+housedataT$lot_size <-cut(housedataT$sqft_lot,breaks=lotbreaks,labels=lotlabels)
+sullivan_andrew <- predict(mod2, newdata = housedataT)
+head(sullivan_andrew)
+
+predict_model <- predict(mod2, newdata=housedata)
+head(predict_model)
+```
+
+
+
+
+

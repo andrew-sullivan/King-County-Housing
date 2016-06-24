@@ -1,0 +1,141 @@
+---
+title: "Project 1"
+author: "Andrew Sullivan"
+date: "3/1/2016"
+output: html_document
+---
+
+```{r, echo=FALSE, include=FALSE}
+library(knitr)
+library(plyr)
+require(DT)
+require(MASS)
+require(car)
+library(effects)
+```
+
+**Read the data from http://www.amstat.org/publications/jse/datasets/homes76.dat.txt into an R object named `HP`.**
+
+**Remove columns 1, 7, 10, 15, 16, 17, 18, and 19 from `HP` and store the result back in `HP`.**
+
+**Name the columns in `HP` `price`, `size`, `lot`, `bath`, `bed`, `year`, `age`, `garage`, `status`, `active`, and `elem`, respectively.**
+
+**Use the function `datatable` from the `DT` package to display the data from `HP`. Your data display should look similar to the one below.**
+
+```{r}
+HP <- read.table("http://www.amstat.org/publications/jse/datasets/homes76.dat.txt",header=TRUE)
+HP <- subset(HP,select=-c(1,7,10,15:19))
+HP <- rename(HP,c("Y"="price",
+            "X1"="size",
+            "X2"="lot",
+            "X3"="bath",
+            "X4"="bed",
+            "X5"="age",
+            "X6"="garage",
+            "D7"="active"))
+datatable(HP)
+```
+
+**What are the units for `price` and `size`? Use the function `stepAIC` from the `MASS` package to create models using forward selection and backward elimination. Store the model from backward elimination in an object named `mod.be` and the model from forward selection in an object named `mod.fs.`**
+
+`price` is in thousands of dollars, and `size` is in thousands of ft$^2$.
+
+```{r, results='hide'}
+mod.fs <- stepAIC(lm(price ~ 1, data = HP), scope = .~size + lot + bath + bed + year + age + garage + status + active + elem, direction = "forward", test = "F")
+mod.be <- stepAIC(lm(price ~ size + lot + bath + bed + year + age + garage + status + active + elem, data = HP), scope = .~size + lot + bath + bed + year + age + garage + status + active + elem, direction = "backward", test = "F")
+```
+
+**Which model (`mod.be` or `mod.fs`) do you believe is better and why?**
+
+```{r}
+summary(mod.fs)
+summary(mod.be)
+```
+
+`mod.be` seems to be a better model because it has a higher adjusted $R^2$ value and a lower standard error.
+
+**Create a model and name it `mod1` that regresses price on all of the variables in `HP` with the exception of `status` and `year`. Produce a summary of `mod1` and graph the residuals using `residualPlots` from the `car` package. Based on your residual plots, what might you do to `mod1`? Report the adjusted $R^2$ value for `mod1`.**
+
+```{r}
+mod1 <- lm(price ~ . - status - year, data = HP)
+summary(mod1)
+residualPlots(mod1)
+```
+
+Several of the residual plots are curves (non-linear), indicating that we should try introducing non-linear transformations into the model, particularly for the `lot`, `bed`, `bath`, and `age` predictors.
+
+The adjusted $R^2$ value $=$ `r summary(mod1)$adj.r.squared`.
+
+**Create a new model (`mod2`) by adding `bath:bed` and `age`$^2$ to `mod1`. Report the adjusted $R^2$ value for `mod2`.**
+
+```{r}
+mod2 <- lm(price ~ . - status - year + bed:bath + I(age^2), data = HP)
+```
+
+The adjusted $R^2$ value $=$ `r summary(mod2)$adj.r.squared`.
+
+**Create a new model (`mod3`) by using only `edison` and `harris` from `elem` from `mod2`. Hint: use `I()`. Your estimated coefficients should agree with those in the article. Conduct a nested F-test (`anova(mod2, mod3)`). Does your p-value agree with the one presented in the article? Interpret this test. Report the adjusted $R^2$ value for `mod3`.**
+
+```{r}
+mod3 <- lm(price ~ . - elem - status -  year + bed:bath + I(age^2) + I(elem=="edison") + I(elem=="harris"), data = HP)
+coef(mod3)
+```
+
+These coefficients agree with those in the article.
+
+```{r}
+n.test <- anova(mod2,mod3)
+```
+
+The p-value of the nested F-test is `r n.test$Pr[2]`, which agrees with the p-value presented in the article. `mod3` and `mod2` are nested because all of `mod3` is contained within `mod2` (in this instance, only the `elem` predictor is reduced in `mod3`). The nested F-test essentially tests:
+
+$H_0$: the reduced model is accurate, and the dropped predictors' regression parameters are zero
+
+$H_a$: the full model is better
+
+Because the p-value is much greater than 0.05, we cannot reject the null hypothesis, and it is safe to use the reduced model.
+
+The adjusted $R^2$ value $=$ `r summary(mod3)$adj.r.squared`.
+
+**Compute the training mean square prediction error for all five of the models. Which model has the smallest training mean square prediction error? Do you think this model will also have the smallest test mean square prediction error?**
+
+```{r}
+MSE.fs <- mean(mod.fs$residuals^2)
+print(MSE.fs)
+MSE.be <- mean(mod.be$residuals^2)
+print(MSE.be)
+MSE1 <- mean(mod1$residuals^2)
+print(MSE1)
+MSE2 <- mean(mod2$residuals^2)
+print(MSE2)
+MSE3 <- mean(mod3$residuals^2)
+print(MSE3)
+```
+
+`mod3` has the smallest training mean square prediction error. This does not necessarily mean it will have the smallest test mean square prediction error - it could be over-fit to this specific data and not perform as well with other sets.
+
+**Use `mod3` to create a 95% prediction interval for a home with the following features: 1879 feet, lot size category 4, two and a half baths, three bedrooms, built in 1975, two-car garage, and near Parker Elementary School.**
+
+```{r}
+pred <- predict(mod3, newdata = data.frame(size=1.879, lot=4, bath=1.1, bed=3, year=1975, age=0.5, garage=2, elem="parker", active=1, status="act"), interval = "pred", level=0.95)
+print(pred)
+```
+
+**Install the package `effects` and run the following code:**
+
+```{r}
+plot(allEffects(mod2))
+plot(effect("bath*bed", mod2))
+plot(effect("bath*bed", mod2, xlevels=list(bed=2:5)))
+plot(effect("bath*bed", mod2, xlevels=list(bath=1:3)))
+```
+
+**Explain what each set of graphs is showing.**
+
+The initial set of graphs show the effects of all the predictors of `mod2` on `price`, with the predictor on the $x$-axis and price on the $y$-axis. This makes intuitive sense - as seen in the graphs, we would expect price to increase as factors like size or lot increase, and decrease as age increases.
+
+The second set of graphs shows the effect of `bed*bath` as a predictor on `price`. Each separate line represents a different number of bedrooms (two through six), with the number of bathrooms on the $x$-axes and price again on the $y$-axes.
+
+The third set of graphs is the same as the second, but eliminates any houses that have six bedrooms.
+
+The fourth set of graphs again shows the effect of `bed*bath` as a predictor on `price`, but is formatted differently. Here each seperate line represents a different number of bathrooms (one through three), while the $x$-axes represent bedrooms.

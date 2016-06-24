@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html >
+
+<head>
+
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Modeling the price of houses in King County, Washington</title>
+  <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+  <meta name="description" content="Modeling the price of houses in King County, Washington">
+  <meta name="generator" content="bookdown 0.0.54 and GitBook 2.6.7">
+
+  <meta property="og:title" content="Modeling the price of houses in King County, Washington" />
+  <meta property="og:type" content="book" />
+  
+  
+  
+
+<meta name="author" content="Andrew Sullivan">
+
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+  TeX: { equationNumbers: { autoNumber: "AMS" } }
+});
+</script>
+  <script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  
+  
+<link rel="prev" href="methods.html">
+<link rel="next" href="conclusions.html">
+
+<link href="libs/gitbook-2.6.7/css/style.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-bookdown.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-highlight.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-search.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-fontsettings.css" rel="stylesheet" />
+
+
+
+
+
+
+
+<script src="libs/htmlwidgets-0.6/htmlwidgets.js"></script>
+<script src="libs/jquery-1.11.1/jquery.min.js"></script>
+<script src="libs/datatables-binding-0.1/datatables.js"></script>
+<script src="libs/datatables-1.10.7/jquery.dataTables.min.js"></script>
+<link href="libs/datatables-default-1.10.7/dataTables.extra.css" rel="stylesheet" />
+<link href="libs/datatables-default-1.10.7/jquery.dataTables.min.css" rel="stylesheet" />
+
+
+
+</head>
+
+<body>
+
+
+  <div class="book without-animation with-summary font-size-2 font-family-1" data-basepath=".">
+
+    <div class="book-summary">
+      <nav role="navigation">
+
+<ul class="summary">
+<li class="chapter" data-level="1" data-path="introduction.html"><a href="introduction.html"><i class="fa fa-check"></i><b>1</b> Introduction</a></li>
+<li class="chapter" data-level="2" data-path="methods.html"><a href="methods.html"><i class="fa fa-check"></i><b>2</b> Methods</a><ul>
+<li class="chapter" data-level="2.1" data-path="methods.html"><a href="methods.html#data-collection"><i class="fa fa-check"></i><b>2.1</b> Data Collection</a></li>
+<li class="chapter" data-level="2.2" data-path="methods.html"><a href="methods.html#exploratory-analysis"><i class="fa fa-check"></i><b>2.2</b> Exploratory Analysis</a></li>
+<li class="chapter" data-level="2.3" data-path="methods.html"><a href="methods.html#statistical-modeling"><i class="fa fa-check"></i><b>2.3</b> Statistical Modeling</a></li>
+<li class="chapter" data-level="2.4" data-path="methods.html"><a href="methods.html#reproducibility"><i class="fa fa-check"></i><b>2.4</b> Reproducibility</a></li>
+</ul></li>
+<li class="chapter" data-level="3" data-path="results.html"><a href="results.html"><i class="fa fa-check"></i><b>3</b> Results</a></li>
+<li class="chapter" data-level="4" data-path="conclusions.html"><a href="conclusions.html"><i class="fa fa-check"></i><b>4</b> Conclusions</a></li>
+<li class="chapter" data-level="5" data-path="references.html"><a href="references.html"><i class="fa fa-check"></i><b>5</b> References</a></li>
+</ul>
+
+      </nav>
+    </div>
+
+    <div class="book-body">
+      <div class="body-inner">
+        <div class="book-header" role="navigation">
+          <h1>
+            <i class="fa fa-circle-o-notch fa-spin"></i><a href="./">Modeling the price of houses in King County, Washington</a>
+          </h1>
+        </div>
+
+        <div class="page-wrapper" tabindex="-1" role="main">
+          <div class="page-inner">
+
+            <section class="normal" id="section-">
+<div id="results" class="section level1">
+<h1><span class="header-section-number">3</span> Results</h1>
+<p>Feature selection was first performed by comparing AIC in a stepwise algorithm using the <code>MASS</code> package function <code>stepAIC</code> on the cleaned data including all variables. The forward-selected model (<code>modfs</code>) suggested inclusion of all features except <code>sqft_basement</code>. It reported an adjusted R<span class="math">\(^2\)</span> value of 0.8355252.</p>
+<p>The second model (<code>mod2</code>) included polynomial features as suggested by residual plots of the forward-selected model, as well as interaction features that might be expected to contribute to housing price, including <code>bedrooms:bathrooms</code>, <code>sqft_living:sqft_lot</code>, <code>sqft_lot15:sqft_lot</code>, and <code>sqft_living15:sqft_living</code>. Because the <code>waterfront</code> variable seemed to have such an outsized effect (see plot in Exploratory Analysis section), interaction features between <code>waterfront</code> and several other variables were also introduced. Additionally, as suggested by the recent Seattle Times article <a href="http://www.seattletimes.com/business/real-estate/king-county-home-prices-hit-a-new-record-in-december/">King County home prices hit new highs</a>, prices for smaller house sizes vary widely among different parts of the county, so interactions between <code>zipcode:sqft_living</code> and <code>zipcode:sqft_lot</code> were introduced. This model reported an adjusted R<span class="math">\(^2\)</span> value of 0.8936752.</p>
+<p>The final model (<code>mod3</code>) simplified the previous model by dropping several first-degree polynomials and interactions with low significance (p-value &gt; .05). This model reported an adjusted R<span class="math">\(^2\)</span> value of 0.8902894.</p>
+<p>5-fold cross-validation was performed using all three models with the <code>cv.glm</code> function from the <code>boot</code> package. <code>mod3</code> consistently achieved the lowest mean squared test error. Results of twenty repetitions of 5-fold cross-validation tests on all three models are plotted below:</p>
+</div>
+            </section>
+
+          </div>
+        </div>
+      </div>
+<a href="methods.html" class="navigation navigation-prev " aria-label="Previous page"><i class="fa fa-angle-left"></i></a>
+<a href="conclusions.html" class="navigation navigation-next " aria-label="Next page""><i class="fa fa-angle-right"></i></a>
+
+<script src="libs/gitbook-2.6.7/js/app.js"></script>
+<script src="libs/gitbook-2.6.7/js/lunr.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-search.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-sharing.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-fontsettings.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-bookdown.js"></script>
+<script src="libs/gitbook-2.6.7/js/jquery.highlight.js"></script>
+<script>
+require(["gitbook"], function(gitbook) {
+gitbook.start({
+"sharing": {
+"facebook": true,
+"twitter": true,
+"google": false,
+"weibo": false,
+"instapper": false,
+"vk": false,
+"all": ["facebook", "google", "twitter", "weibo", "instapaper"]
+},
+"fontsettings": {
+"theme": "white",
+"family": "sans",
+"size": 2
+},
+"edit": {
+"link": null,
+"text": null
+},
+"download": null,
+"toc": {
+"collapse": "subsection"
+}
+});
+});
+</script>
+
+
+</body>
+
+</html>
